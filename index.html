@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Serial Barcode Generator</title>
+<style>
+/* General layout */
+body { font-family: Calibri, sans-serif; margin: 0; padding: 20px; background: #f9f9f9; }
+.container { max-width: 1200px; margin: 0 auto; }
+h2, h3 { text-align: center; color: #333; }
+
+/* Forms */
+.form-section { background: #fff; padding: 20px; margin-bottom: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+.form-section label { margin-right: 10px; display: inline-block; margin-bottom: 10px; }
+.form-section input[type="number"], .form-section input[type="text"], .form-section select { width: 100px; padding: 5px; margin-right: 10px; }
+.form-section button { padding: 7px 15px; margin-top: 10px; cursor: pointer; }
+
+/* Barcode display */
+.barcode-container { display: grid; grid-gap: 15px; justify-content: center; margin-top: 20px; }
+.barcode-box { border: 1px solid #ddd; padding: 10px; text-align: center; background: #fff; border-radius: 5px; }
+.barcode-box canvas { display: block; margin: 0 auto; }
+
+/* Responsive */
+@media(max-width: 768px){
+  .barcode-container { grid-template-columns: repeat(1, max-content); }
+}
+</style>
+
+<!-- Libraries -->
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+<div class="container">
+
+<h2>Serial Barcode Generator (Code 128)</h2>
+
+<div class="form-section" id="serialSection">
+  <h3>Serial Barcode Generator</h3>
+  <label>Start Number: <input type="number" id="startNum" value="1" min="1"></label>
+  <label>End Number: <input type="number" id="endNum" value="10" min="1"></label><br>
+  <label>Show Up To: <input type="number" id="showUpTo" value="10" min="1"></label><br>
+  <label>Width (px): <input type="number" id="barcodeWidth" value="200" min="50"></label>
+  <label>Height (px): <input type="number" id="barcodeHeight" value="80" min="20"></label><br>
+  <label>Columns: 
+    <select id="numColumns">
+      <option value="1">1</option>
+      <option value="2" selected>2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+      <option value="5">5</option>
+    </select>
+  </label><br>
+  <button id="generateSerialBtn">Generate Serial Barcodes</button>
+  <button id="downloadCSVBtn">Save CSV</button>
+  <button id="downloadPDFBtn">Download PDF</button>
+  <button id="downloadXLSXBtn">Download XLSX</button>
+</div>
+
+<div class="form-section" id="customSection">
+  <h3>Manual Barcode Generator</h3>
+  <label>Prefix: <input type="text" id="customPrefix" placeholder="netmeds"></label>
+  <label>Start Number: <input type="number" id="customStart" value="1" min="1"></label>
+  <label>End Number: <input type="number" id="customEnd" value="10" min="1"></label><br>
+  <button id="generateCustomBtn">Generate Custom Barcodes</button>
+</div>
+
+<div class="form-section" id="specificSection">
+  <h3>Specific Number Barcode Generator</h3>
+  <label>Enter Value: <input type="text" id="specificNumber" placeholder="12345"></label>
+  <button id="generateSpecificBtn">Generate Specific Barcode</button>
+</div>
+
+<div class="barcode-container" id="barcodeContainer"></div>
+
+<script>
+window.onload = function() {
+
+let generatedBarcodes = [];
+
+// Helper: Create barcode canvas
+function createBarcodeCanvas(data, width, height){
+  const canvas = document.createElement('canvas');
+  JsBarcode(canvas, data, {
+    format:"CODE128",
+    width:2,
+    height:height-20,
+    displayValue:true,
+    font:"Calibri",
+    fontSize:16,
+    margin:5
+  });
+  canvas.style.width = width+"px";
+  canvas.style.height = height+"px";
+  return canvas;
+}
+
+// Update barcode container columns
+function updateColumns(){
+  const columns = parseInt(document.getElementById('numColumns').value);
+  document.getElementById('barcodeContainer').style.gridTemplateColumns = `repeat(${columns}, max-content)`;
+}
+
+// Generate Serial Barcodes
+function generateBarcodes(){
+  const start = parseInt(document.getElementById('startNum').value);
+  const end = parseInt(document.getElementById('endNum').value);
+  const showUpTo = parseInt(document.getElementById('showUpTo').value);
+  const width = parseInt(document.getElementById('barcodeWidth').value);
+  const height = parseInt(document.getElementById('barcodeHeight').value);
+
+  if(isNaN(start)||isNaN(end)||isNaN(showUpTo)||start>end||showUpTo<start||showUpTo>end){
+    alert("Invalid numbers"); return;
+  }
+
+  const container = document.getElementById('barcodeContainer');
+  container.innerHTML = "";
+  updateColumns();
+  generatedBarcodes = [];
+
+  for(let i=start;i<=end && i<=showUpTo;i++){
+    const data = `A-${String(i).padStart(4,'0')}-Z`;
+    const box = document.createElement('div'); box.className='barcode-box';
+    box.appendChild(createBarcodeCanvas(data,width,height));
+    container.appendChild(box);
+    generatedBarcodes.push(data);
+  }
+}
+
+// Generate Custom Barcodes
+function generateCustomBarcodes(){
+  const prefix = document.getElementById('customPrefix').value.trim();
+  const start = parseInt(document.getElementById('customStart').value);
+  const end = parseInt(document.getElementById('customEnd').value);
+  const width = parseInt(document.getElementById('barcodeWidth').value);
+  const height = parseInt(document.getElementById('barcodeHeight').value);
+
+  if(!prefix || isNaN(start) || isNaN(end) || start>end){ alert("Invalid values"); return;}
+
+  const container = document.getElementById('barcodeContainer');
+  container.innerHTML = "";
+  updateColumns();
+  generatedBarcodes = [];
+
+  for(let i=start;i<=end;i++){
+    const data = `${prefix}${i}`;
+    const box = document.createElement('div'); box.className='barcode-box';
+    box.appendChild(createBarcodeCanvas(data,width,height));
+    container.appendChild(box);
+    generatedBarcodes.push(data);
+  }
+}
+
+// Generate Specific Barcode
+function generateSpecificBarcode(){
+  const value = document.getElementById('specificNumber').value.trim();
+  const width = parseInt(document.getElementById('barcodeWidth').value);
+  const height = parseInt(document.getElementById('barcodeHeight').value);
+
+  if(!value){ alert("Enter value"); return;}
+
+  const container = document.getElementById('barcodeContainer');
+  container.innerHTML = "";
+  updateColumns();
+  generatedBarcodes = [];
+
+  const box = document.createElement('div'); box.className='barcode-box';
+  box.appendChild(createBarcodeCanvas(value,width,height));
+  container.appendChild(box);
+  generatedBarcodes.push(value);
+}
+
+// Live resize
+function updateBarcodeSizes(){
+  const width = parseInt(document.getElementById('barcodeWidth').value);
+  const height = parseInt(document.getElementById('barcodeHeight').value);
+  document.querySelectorAll('#barcodeContainer canvas').forEach(canvas=>{
+    canvas.style.width=width+"px";
+    canvas.style.height=height+"px";
+  });
+}
+
+// Download PDF
+async function downloadPDF(){
+  const container = document.getElementById('barcodeContainer');
+  if(!container.innerHTML.trim()){ alert("No barcodes to download"); return;}
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('p','pt','a4');
+  const canvas = await html2canvas(container,{scale:3,backgroundColor:'#ffffff'});
+  const imgData = canvas.toDataURL('image/png');
+  const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfHeight = (canvas.height*pdfWidth)/canvas.width;
+  pdf.addImage(imgData,'PNG',0,0,pdfWidth,pdfHeight);
+  pdf.save('barcodes.pdf');
+}
+
+// Download CSV
+function downloadCSV(){
+  if(generatedBarcodes.length===0){ alert("No barcodes generated yet."); return;}
+  let csvContent = "data:text/csv;charset=utf-8,Barcode\n";
+  generatedBarcodes.forEach(bc => { csvContent += bc + "\n"; });
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", "barcodes.csv");
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+// Download XLSX (text-only, fully compatible)
+function downloadXLSX(){
+  if(generatedBarcodes.length===0){ alert("No barcodes generated yet."); return;}
+  const workbook = XLSX.utils.book_new();
+  const ws_data = [["Barcode"], ...generatedBarcodes.map(bc => [bc])];
+  const ws = XLSX.utils.aoa_to_sheet(ws_data);
+  XLSX.utils.book_append_sheet(workbook, ws, "Barcodes");
+  XLSX.writeFile(workbook, "barcodes.xlsx");
+}
+
+// Event listeners
+document.getElementById('generateSerialBtn').addEventListener('click', generateBarcodes);
+document.getElementById('generateCustomBtn').addEventListener('click', generateCustomBarcodes);
+document.getElementById('generateSpecificBtn').addEventListener('click', generateSpecificBarcode);
+document.getElementById('downloadPDFBtn').addEventListener('click', downloadPDF);
+document.getElementById('downloadCSVBtn').addEventListener('click', downloadCSV);
+document.getElementById('downloadXLSXBtn').addEventListener('click', downloadXLSX);
+document.getElementById('barcodeWidth').addEventListener('input', updateBarcodeSizes);
+document.getElementById('barcodeHeight').addEventListener('input', updateBarcodeSizes);
+document.getElementById('numColumns').addEventListener('change', updateColumns);
+
+}
+</script>
+</div>
+</body>
+</html>
